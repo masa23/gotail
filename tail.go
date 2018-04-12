@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"syscall"
+	"time"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -140,6 +141,7 @@ func (t Tail) Scan() Tail {
 
 			fd, err := os.Open(t.file)
 			if os.IsNotExist(err) {
+				time.Sleep(time.Millisecond * 10)
 				continue
 			} else if err != nil {
 				panic(err)
@@ -160,6 +162,7 @@ func (t Tail) Scan() Tail {
 					t.fileFd.Seek(0, os.SEEK_SET)
 				}
 				t.Stat.Size = stat.Size
+				time.Sleep(time.Millisecond * 10)
 				fd.Close()
 			}
 

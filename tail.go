@@ -27,18 +27,18 @@ type Stat struct {
 	Size   int64  `yaml:"Size"`
 }
 
-func Open(file string, posfile string) (Tail, error) {
+func Open(file string, posfile string) (*Tail, error) {
 	var err error
 	t := Tail{file: file, posFile: posfile}
 
 	// ポジションファイル読み込み
 	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
-		return t, err
+		return &t, err
 	}
 	posdata, err := ioutil.ReadAll(t.posFd)
 	if err != nil {
-		return t, err
+		return &t, err
 	}
 	posStat := Stat{}
 	yaml.Unmarshal(posdata, &posStat)
@@ -46,13 +46,13 @@ func Open(file string, posfile string) (Tail, error) {
 	// tailするファイルを開く
 	t.fileFd, err = os.Open(t.file)
 	if err != nil {
-		return t, err
+		return &t, err
 	}
 
 	// tailするファイルのstatを取得
 	fdStat, err := t.fileFd.Stat()
 	if err != nil {
-		return t, err
+		return &t, err
 	}
 	stat := fdStat.Sys().(*syscall.Stat_t)
 
@@ -70,18 +70,18 @@ func Open(file string, posfile string) (Tail, error) {
 	}
 
 	// posファイルの更新
-	err = posUpdate(t)
+	err = posUpdate(&t)
 	if err != nil {
-		return t, err
+		return &t, err
 	}
 
 	// tail 読み込み位置移動
 	t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
 
-	return t, nil
+	return &t, nil
 }
 
-func (t Tail) Close() error {
+func (t *Tail) Close() error {
 	err := t.posFd.Close()
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (t Tail) Close() error {
 	return nil
 }
 
-func posUpdate(t Tail) error {
+func posUpdate(t *Tail) error {
 	t.posFd.Truncate(0)
 	t.posFd.Seek(0, 0)
 
@@ -112,15 +112,15 @@ func posUpdate(t Tail) error {
 	return nil
 }
 
-func (t Tail) TailBytes() []byte {
+func (t *Tail) TailBytes() []byte {
 	return <-t.data
 }
 
-func (t Tail) TailString() string {
+func (t *Tail) TailString() string {
 	return string(<-t.data)
 }
 
-func (t Tail) Scan() Tail {
+func (t *Tail) Scan() {
 	t.data = make(chan []byte)
 	go func() {
 		var err error
@@ -172,5 +172,4 @@ func (t Tail) Scan() Tail {
 			}
 		}
 	}()
-	return t
 }

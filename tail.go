@@ -135,7 +135,10 @@ func (t *Tail) Scan() {
 		for {
 			scanner := bufio.NewScanner(t.fileFd)
 			for scanner.Scan() {
-				t.data <- scanner.Bytes()
+				scbytes := scanner.Bytes()
+				data := make([]byte, len(scbytes))
+				copy(data, scanner.Bytes())
+				t.data <- data
 			}
 
 			if err := scanner.Err(); err != nil {

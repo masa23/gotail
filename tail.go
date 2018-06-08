@@ -12,12 +12,13 @@ import (
 
 // Tail is tail file struct
 type Tail struct {
-	file    string
-	fileFd  *os.File
-	posFile string
-	posFd   *os.File
-	Stat    Stat
-	data    chan []byte
+	file                   string
+	fileFd                 *os.File
+	posFile                string
+	posFd                  *os.File
+	Stat                   Stat
+	data                   chan []byte
+	InitialReadPositionEnd bool // If true, there is no pos file Start reading from the end of the file
 }
 
 // Stat tail stats infomation struct
@@ -30,6 +31,7 @@ type Stat struct {
 // Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
+	var isCreatePosFile bool
 	t := Tail{file: file, posFile: posfile}
 
 	// open position file
@@ -41,6 +43,7 @@ func Open(file string, posfile string) (*Tail, error) {
 		if err != nil {
 			return &t, err
 		}
+		isCreatePosFile = true
 	}
 	posdata, err := ioutil.ReadAll(t.posFd)
 	if err != nil {
@@ -80,7 +83,11 @@ func Open(file string, posfile string) (*Tail, error) {
 	}
 
 	// tail seek posititon.
-	t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
+	if isCreatePosFile {
+		t.fileFd.Seek(0, os.SEEK_END)
+	} else {
+		t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
+	}
 
 	return &t, nil
 }

@@ -18,6 +18,7 @@ type Tail struct {
 	posFd                  *os.File
 	Stat                   Stat
 	data                   chan []byte
+	isCreatePosFile        bool
 	InitialReadPositionEnd bool // If true, there is no pos file Start reading from the end of the file
 }
 
@@ -31,7 +32,6 @@ type Stat struct {
 // Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
-	var isCreatePosFile bool
 	t := Tail{file: file, posFile: posfile}
 
 	// open position file
@@ -43,7 +43,7 @@ func Open(file string, posfile string) (*Tail, error) {
 		if err != nil {
 			return &t, err
 		}
-		isCreatePosFile = true
+		t.isCreatePosFile = true
 	}
 	posdata, err := ioutil.ReadAll(t.posFd)
 	if err != nil {
@@ -83,11 +83,7 @@ func Open(file string, posfile string) (*Tail, error) {
 	}
 
 	// tail seek posititon.
-	if isCreatePosFile {
-		t.fileFd.Seek(0, os.SEEK_END)
-	} else {
-		t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
-	}
+	t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
 
 	return &t, nil
 }
@@ -136,6 +132,10 @@ func (t *Tail) TailString() string {
 
 // Scan is start scan.
 func (t *Tail) Scan() {
+	// there is no pos file Start reading from the end of the file
+	if t.InitialReadPositionEnd && t.isCreatePosFile {
+		t.fileFd.Seek(0, os.SEEK_END)
+	}
 	t.data = make(chan []byte)
 	go func() {
 		var err error

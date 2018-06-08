@@ -1,4 +1,4 @@
-package tail
+package gotail
 
 import (
 	"bufio"
@@ -10,7 +10,7 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-// Tail メソッド用
+// Tail is tail file struct
 type Tail struct {
 	file    string
 	fileFd  *os.File
@@ -20,21 +20,27 @@ type Tail struct {
 	data    chan []byte
 }
 
-// Stat ファイルの状態用の構造体
+// Stat tail stats infomation struct
 type Stat struct {
-	Ino    uint64 `yaml:"Ino"`
+	Inode  uint64 `yaml:"Inode"`
 	Offset int64  `yaml:"Offset"`
 	Size   int64  `yaml:"Size"`
 }
 
+// Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
 	t := Tail{file: file, posFile: posfile}
 
-	// ポジションファイル読み込み
-	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
-	if err != nil {
+	// open position file
+	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR, 0644)
+	if err != nil && !os.IsNotExist(err) {
 		return &t, err
+	} else if os.IsNotExist(err) {
+		t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return &t, err
+		}
 	}
 	posdata, err := ioutil.ReadAll(t.posFd)
 	if err != nil {
@@ -43,44 +49,43 @@ func Open(file string, posfile string) (*Tail, error) {
 	posStat := Stat{}
 	yaml.Unmarshal(posdata, &posStat)
 
-	// tailするファイルを開く
+	// open tail file.
 	t.fileFd, err = os.Open(t.file)
 	if err != nil {
 		return &t, err
 	}
 
-	// tailするファイルのstatを取得
+	// get file stat
 	fdStat, err := t.fileFd.Stat()
 	if err != nil {
 		return &t, err
 	}
 	stat := fdStat.Sys().(*syscall.Stat_t)
 
-	// statの作成
-	t.Stat.Ino = stat.Ino
+	// file stat
+	t.Stat.Inode = stat.Ino
 	t.Stat.Size = stat.Size
-	if stat.Ino == posStat.Ino && stat.Size >= posStat.Size {
-		// inodeの変更がなくサイズ以前より大きい場合は
-		// posのOffsetの続きから読み込む
+	if stat.Ino == posStat.Inode && stat.Size >= posStat.Size {
+		// If the inode is not changed, restart from the subsequent Offset.
 		t.Stat.Offset = posStat.Offset
 	} else {
-		// ファイルが変わっている、サイズが小さい場合は
-		// Offsetを0にして最初から読み込む
+		// If the file size is small, set the offset to 0.
 		t.Stat.Offset = 0
 	}
 
-	// posファイルの更新
+	// update position file
 	err = posUpdate(&t)
 	if err != nil {
 		return &t, err
 	}
 
-	// tail 読み込み位置移動
+	// tail seek posititon.
 	t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
 
 	return &t, nil
 }
 
+// Close is file and position file close.
 func (t *Tail) Close() error {
 	err := t.posFd.Close()
 	if err != nil {
@@ -112,14 +117,17 @@ func posUpdate(t *Tail) error {
 	return nil
 }
 
+// TailBytes is get one line bytes.
 func (t *Tail) TailBytes() []byte {
 	return <-t.data
 }
 
+// TailString is get one line strings.
 func (t *Tail) TailString() string {
 	return string(<-t.data)
 }
 
+// Scan is start scan.
 func (t *Tail) Scan() {
 	t.data = make(chan []byte)
 	go func() {
@@ -151,8 +159,8 @@ func (t *Tail) Scan() {
 				panic(err)
 			}
 			stat := fdStat.Sys().(*syscall.Stat_t)
-			if stat.Ino != t.Stat.Ino {
-				t.Stat.Ino = stat.Ino
+			if stat.Ino != t.Stat.Inode {
+				t.Stat.Inode = stat.Ino
 				t.Stat.Offset = 0
 				t.Stat.Size = stat.Size
 				t.fileFd.Close()

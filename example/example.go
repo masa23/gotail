@@ -1,11 +1,13 @@
-# gotail
+package main
 
-## License
-MIT
+import (
+	"fmt"
+	"os"
+	"time"
 
-## Example
+	"github.com/masa23/gotail"
+)
 
-```
 // init construct
 const (
 	LogFile = "./test.log"
@@ -42,4 +44,3 @@ func main() {
 	}
 
 }
-```

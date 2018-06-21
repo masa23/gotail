@@ -102,6 +102,11 @@ func (t *Tail) Close() error {
 	return nil
 }
 
+// PositionUpdate is pos file update
+func (t *Tail) PositionUpdate() {
+	posUpdate(t)
+}
+
 func posUpdate(t *Tail) error {
 	t.posFd.Truncate(0)
 	t.posFd.Seek(0, 0)

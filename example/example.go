@@ -41,7 +41,7 @@ func main() {
 		fmt.Println(b)
 	}
 
-	if tail.Err() != nil {
+	if err = tail.Err(); err != nil {
 		panic(err)
 	}
 }

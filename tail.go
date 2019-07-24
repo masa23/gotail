@@ -18,6 +18,10 @@ type Tail struct {
 	posFd                  *os.File
 	Stat                   Stat
 	data                   chan []byte
+	init                   bool
+	done                   bool
+	scanner                *bufio.Scanner
+	err                    error
 	isCreatePosFile        bool
 	InitialReadPositionEnd bool // If true, there is no pos file Start reading from the end of the file
 }
@@ -32,7 +36,12 @@ type Stat struct {
 // Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
-	t := Tail{file: file, posFile: posfile}
+	t := Tail{
+		file:    file,
+		posFile: posfile,
+		init:    true,
+		done:    false,
+	}
 
 	// open position file
 	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR, 0644)
@@ -125,74 +134,90 @@ func posUpdate(t *Tail) error {
 	return nil
 }
 
-// TailBytes is get one line bytes.
-func (t *Tail) TailBytes() []byte {
+// Bytes is get one line bytes.
+func (t *Tail) Bytes() []byte {
 	return <-t.data
 }
 
-// TailString is get one line strings.
-func (t *Tail) TailString() string {
+// Text is get one line strings.
+func (t *Tail) Text() string {
 	return string(<-t.data)
 }
 
+// Err is get Scan error
+func (t *Tail) Err() error {
+	return t.err
+}
+
 // Scan is start scan.
-func (t *Tail) Scan() {
-	// there is no pos file Start reading from the end of the file
-	if t.InitialReadPositionEnd && t.isCreatePosFile {
-		t.fileFd.Seek(0, os.SEEK_END)
+func (t *Tail) Scan() bool {
+	var err error
+	if t.done {
+		return false
 	}
-	t.data = make(chan []byte)
-	go func() {
-		var err error
-		for {
-			scanner := bufio.NewScanner(t.fileFd)
-			for scanner.Scan() {
-				scbytes := scanner.Bytes()
-				data := make([]byte, len(scbytes))
-				copy(data, scanner.Bytes())
-				t.data <- data
-			}
-
-			if err := scanner.Err(); err != nil {
-				panic(err)
-			}
-
-			t.Stat.Offset, err = t.fileFd.Seek(0, os.SEEK_CUR)
-			if err != nil {
-				panic(err)
-			}
-
-			fd, err := os.Open(t.file)
-			if os.IsNotExist(err) {
-				time.Sleep(time.Millisecond * 10)
-				continue
-			} else if err != nil {
-				panic(err)
-			}
-			fdStat, err := fd.Stat()
-			if err != nil {
-				panic(err)
-			}
-			stat := fdStat.Sys().(*syscall.Stat_t)
-			if stat.Ino != t.Stat.Inode {
-				t.Stat.Inode = stat.Ino
-				t.Stat.Offset = 0
-				t.Stat.Size = stat.Size
-				t.fileFd.Close()
-				t.fileFd = fd
-			} else {
-				if stat.Size < t.Stat.Size {
-					t.fileFd.Seek(0, os.SEEK_SET)
-				}
-				t.Stat.Size = stat.Size
-				time.Sleep(time.Millisecond * 10)
-				fd.Close()
-			}
-
-			err = posUpdate(t)
-			if err != nil {
-				panic(err)
-			}
+	if t.init {
+		// there is no pos file Start reading from the end of the file
+		if t.InitialReadPositionEnd && t.isCreatePosFile {
+			t.fileFd.Seek(0, os.SEEK_END)
 		}
-	}()
+		t.data = make(chan []byte, 1)
+		t.scanner = bufio.NewScanner(t.fileFd)
+		t.init = false
+	}
+
+	for {
+		if t.scanner.Scan() {
+			scbytes := t.scanner.Bytes()
+			data := make([]byte, len(scbytes))
+			copy(data, t.scanner.Bytes())
+			t.data <- data
+			return true
+		}
+
+		if err := t.scanner.Err(); err != nil {
+			t.err = err
+			return false
+		}
+
+		t.Stat.Offset, err = t.fileFd.Seek(0, os.SEEK_CUR)
+		if err != nil {
+			t.err = err
+			return false
+		}
+
+		fd, err := os.Open(t.file)
+		if os.IsNotExist(err) {
+			time.Sleep(time.Millisecond * 10)
+		} else if err != nil {
+			t.err = err
+			return false
+		}
+		fdStat, err := fd.Stat()
+		if err != nil {
+			t.err = err
+			return false
+		}
+		stat := fdStat.Sys().(*syscall.Stat_t)
+		if stat.Ino != t.Stat.Inode {
+			t.Stat.Inode = stat.Ino
+			t.Stat.Offset = 0
+			t.Stat.Size = stat.Size
+			t.fileFd.Close()
+			t.fileFd = fd
+		} else {
+			if stat.Size < t.Stat.Size {
+				t.fileFd.Seek(0, os.SEEK_SET)
+			}
+			t.Stat.Size = stat.Size
+			time.Sleep(time.Millisecond * 10)
+			fd.Close()
+		}
+		t.scanner = bufio.NewScanner(t.fileFd)
+
+		err = posUpdate(t)
+		if err != nil {
+			t.err = err
+			return false
+		}
+	}
 }

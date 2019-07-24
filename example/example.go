@@ -36,11 +36,12 @@ func main() {
 		panic(err)
 	}
 
-	tail.Scan()
-
-	for {
-		b := tail.TailString()
+	for tail.Scan() {
+		b := tail.Text()
 		fmt.Println(b)
 	}
 
+	if err = tail.Err(); err != nil {
+		panic(err)
+	}
 }

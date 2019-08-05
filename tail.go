@@ -59,7 +59,10 @@ func Open(file string, posfile string) (*Tail, error) {
 		return &t, err
 	}
 	posStat := Stat{}
-	yaml.Unmarshal(posdata, &posStat)
+	err = yaml.Unmarshal(posdata, &posStat)
+	if err != nil {
+		return &t, err
+	}
 
 	// open tail file.
 	t.fileFd, err = os.Open(t.file)
@@ -92,7 +95,10 @@ func Open(file string, posfile string) (*Tail, error) {
 	}
 
 	// tail seek posititon.
-	t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
+	_, err = t.fileFd.Seek(t.Stat.Offset, os.SEEK_SET)
+	if err != nil {
+		return &t, err
+	}
 
 	return &t, nil
 }
@@ -125,12 +131,15 @@ func posUpdate(t *Tail) error {
 		return err
 	}
 
-	t.posFd.Write(yml)
+	_, err = t.posFd.Write(yml)
 	if err != nil {
 		return err
 	}
 
-	t.posFd.Sync()
+	err = t.posFd.Sync()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -199,15 +208,19 @@ func (t *Tail) Scan() bool {
 			t.Stat.Inode = stat.Ino
 			t.Stat.Offset = 0
 			t.Stat.Size = stat.Size
-			t.fileFd.Close()
+			_ = t.fileFd.Close()
 			t.fileFd = fd
 		} else {
 			if stat.Size < t.Stat.Size {
-				t.fileFd.Seek(0, os.SEEK_SET)
+				_, err = t.fileFd.Seek(0, os.SEEK_SET)
+				if err != nil {
+					t.err = err
+					return false
+				}
 			}
 			t.Stat.Size = stat.Size
 			time.Sleep(time.Millisecond * 10)
-			fd.Close()
+			_ = fd.Close()
 		}
 		t.scanner = bufio.NewScanner(t.fileFd)
 

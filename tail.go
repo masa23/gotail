@@ -36,6 +36,7 @@ type Stat struct {
 // Open file and position files.
 func Open(file string, posfile string) (*Tail, error) {
 	var err error
+	posStat := Stat{}
 	t := Tail{
 		file:    file,
 		posFile: posfile,
@@ -44,24 +45,25 @@ func Open(file string, posfile string) (*Tail, error) {
 	}
 
 	// open position file
-	t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR, 0644)
-	if err != nil && !os.IsNotExist(err) {
-		return &t, err
-	} else if os.IsNotExist(err) {
-		t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
+	if t.posFile != "" {
+		t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR, 0644)
+		if err != nil && !os.IsNotExist(err) {
+			return &t, err
+		} else if os.IsNotExist(err) {
+			t.posFd, err = os.OpenFile(t.posFile, os.O_RDWR|os.O_CREATE, 0644)
+			if err != nil {
+				return &t, err
+			}
+			t.isCreatePosFile = true
+		}
+		posdata, err := ioutil.ReadAll(t.posFd)
 		if err != nil {
 			return &t, err
 		}
-		t.isCreatePosFile = true
-	}
-	posdata, err := ioutil.ReadAll(t.posFd)
-	if err != nil {
-		return &t, err
-	}
-	posStat := Stat{}
-	err = yaml.Unmarshal(posdata, &posStat)
-	if err != nil {
-		return &t, err
+		err = yaml.Unmarshal(posdata, &posStat)
+		if err != nil {
+			return &t, err
+		}
 	}
 
 	// open tail file.
@@ -123,6 +125,9 @@ func (t *Tail) PositionUpdate() {
 }
 
 func posUpdate(t *Tail) error {
+	if t.posFile == "" {
+		return nil
+	}
 	t.posFd.Truncate(0)
 	t.posFd.Seek(0, 0)
 
@@ -166,7 +171,8 @@ func (t *Tail) Scan() bool {
 	}
 	if t.init {
 		// there is no pos file Start reading from the end of the file
-		if t.InitialReadPositionEnd && t.isCreatePosFile {
+		if (t.InitialReadPositionEnd && t.isCreatePosFile) ||
+			(t.InitialReadPositionEnd && t.posFile == "") {
 			t.fileFd.Seek(0, os.SEEK_END)
 		}
 		t.data = make(chan []byte, 1)

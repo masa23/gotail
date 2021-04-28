@@ -182,7 +182,10 @@ func (t *Tail) Scan() bool {
 
 	for {
 		if t.scanner.Scan() {
-			t.data <- t.scanner.Bytes()
+			buf := t.scanner.Bytes()
+			out := make([]byte, len(buf))
+			copy(out, buf)
+			t.data <- out
 			return true
 		}
 

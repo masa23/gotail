@@ -192,7 +192,7 @@ func (t *Tail) scanInit() {
 		// there is no pos file Start reading from the end of the file
 		if (InitialReadPositionEnd && t.isCreatePosFile) ||
 			(InitialReadPositionEnd && t.posFile == "") {
-			t.fileFd.Seek(0, io.SeekEnd)
+			t.offset1, _ = t.fileFd.Seek(0, io.SeekEnd)
 		}
 		t.init = false
 	}

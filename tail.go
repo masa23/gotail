@@ -44,7 +44,7 @@ type Tail struct {
 	InitialReadPositionEnd bool // deprecated
 }
 
-// Stat tail stats infomation struct
+// Stat tail stats information struct
 type Stat struct {
 	Inode  uint64 `yaml:"Inode"`
 	Offset int64  `yaml:"Offset"`

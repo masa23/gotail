@@ -3,7 +3,6 @@ package gotail
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,7 @@ var tmp string
 
 func TestMain(m *testing.M) {
 	var err error
-	tmp, err = ioutil.TempDir("", "gotail_test")
+	tmp, err = os.MkdirTemp("", "gotail_test")
 	if err != nil {
 		panic(err)
 	}
